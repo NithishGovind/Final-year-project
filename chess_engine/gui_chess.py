@@ -13,9 +13,10 @@ pieces = {
 
 class ChessGUI:
 
-    def __init__(self, game, llm, feedback_window):
+    def __init__(self, game, llm, feedback_window, tts):
         pygame.init()
         self.feedback_window = feedback_window
+        self.tts = tts
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         pygame.display.set_caption("Chess vs Engine")
 
@@ -80,19 +81,17 @@ class ChessGUI:
 
     def generate_feedback_async(self, analysis):
         def worker():
-            try:
-                print("\n--- Generating LLM Feedback ---")
-                feedback = self.llm.generate_feedback(analysis)
-                self.feedback_window.root.after(
-            0,
-            self.feedback_window.update_text,
-            feedback
-        )
-                print("\nLLM Feedback:")
-                print(feedback)
-                print("------------------------------\n")
-            except Exception as e:
-                print("LLM Thread Error:", e)
+            feedback = self.llm.generate_feedback(analysis)
+
+            # Update text window
+            self.feedback_window.root.after(
+                0,
+                self.feedback_window.update_text,
+                feedback
+            )
+
+            # Speak it
+            self.tts.speak_async(feedback)
 
         threading.Thread(target=worker, daemon=True).start()
 

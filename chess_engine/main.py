@@ -2,9 +2,10 @@ from game_logic import ChessGame
 from gui_chess import ChessGUI
 from llm_feedback import LLMFeedback
 from feedback_window import FeedbackWindow
+from tts_engine import TTSEngine
 
 import threading
-
+tts = TTSEngine()
 ENGINE_PATH = "/usr/games/stockfish"
 
 game = ChessGame(ENGINE_PATH)
@@ -13,7 +14,7 @@ feedback_window = FeedbackWindow()
 
 # Run pygame in separate thread
 def run_pygame():
-    gui = ChessGUI(game, llm, feedback_window)
+    gui = ChessGUI(game, llm, feedback_window, tts)
     gui.run()
 
 pygame_thread = threading.Thread(target=run_pygame, daemon=True)
