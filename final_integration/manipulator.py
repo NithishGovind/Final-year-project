@@ -4,15 +4,16 @@ import time
 
 class Manipulator:
 
-    def __init__(self, port="COM3", baud=9600):
+    def __init__(self, port="/dev/ttyUSB0", baud=9600):
 
-        self.ser = serial.Serial(port, baud)
+        self.ser = serial.Serial(port, baud, timeout=1)
         time.sleep(2)
 
-        # HOME position
+        # 🔥 clear startup garbage ("READY")
+        self.ser.reset_input_buffer()
+
         self.HOME = (90, 120, 140)
 
-        # Chessboard angle map
         self.chess_map = [
             [(130,72,135),(120,75,145),(110,80,150),(98,84,152),(85,82,152),(70,80,148),(55,76,145),(42,72,140)],
             [(123,67,128),(115,73,135),(105,74,140),(95,75,140),(85,75,140),(70,72,138),(60,68,138),(50,68,138)],
@@ -25,39 +26,65 @@ class Manipulator:
         ]
 
     # -----------------------
-    # LOW LEVEL SEND
+    # SAFE SEND
     # -----------------------
     def send(self, cmd):
+
+        self.ser.reset_input_buffer()
         self.ser.write((cmd + "\n").encode())
-        time.sleep(0.05)
+
+        start = time.time()
+        buffer = ""
+
+        while True:
+
+            if time.time() - start > 5:
+                print("⚠️ Timeout waiting for Arduino")
+                break
+
+            chunk = self.ser.read(self.ser.in_waiting or 1).decode(errors="ignore")
+
+            if not chunk:
+                continue
+
+            buffer += chunk
+
+            # 🔥 process complete lines only
+            if "\n" not in buffer:
+                continue
+
+            lines = buffer.split("\n")
+            buffer = lines[-1]  # keep incomplete part
+
+            for line in lines[:-1]:
+
+                line = line.strip()
+                if not line:
+                    continue
+
+                print("Arduino:", line)
+
+                if "R_ON" in line or "R_OFF" in line:
+                    return
+
+                if line.startswith("S"):
+                    return
+
+            # ignore READY / ERR / noise
 
     # -----------------------
-    # MOTION LOGIC
+    # MOTION
     # -----------------------
     def move_normal(self, s0, s1, s2):
-
         self.send(f"0,{s0}")
-        time.sleep(2)
-
         self.send(f"2,{s2}")
-        time.sleep(2)
-
         self.send(f"1,{s1}")
-        time.sleep(2)
 
     def move_lift(self, s0, s1, s2):
-
         self.send(f"1,{s1}")
-        time.sleep(2)
-
         self.send(f"2,{s2}")
-        time.sleep(2)
-
         self.send(f"0,{s0}")
-        time.sleep(2)
 
-    # -----------------------
-    # HELPERS
     # -----------------------
     def square_to_index(self, square):
         col = ord(square[0]) - ord('a')
@@ -69,8 +96,6 @@ class Manipulator:
         return self.chess_map[r][c]
 
     # -----------------------
-    # BASIC ACTIONS
-    # -----------------------
     def go_home(self):
         self.move_lift(*self.HOME)
 
@@ -80,45 +105,32 @@ class Manipulator:
 
     def magnet_on(self):
         self.send("on")
-        time.sleep(1)
 
     def magnet_off(self):
         self.send("off")
-        time.sleep(1)
 
-    # -----------------------
-    # HIGH LEVEL ACTIONS
     # -----------------------
     def pick(self, square):
-
+        print("Picking:", square)
         self.move_to(square)
         self.magnet_on()
         self.go_home()
 
     def place(self, square):
-
+        print("Placing:", square)
         self.move_to(square)
         self.magnet_off()
         self.go_home()
 
     def execute_move(self, from_sq, to_sq):
-
-        print(f"Executing move: {from_sq} -> {to_sq}")
-
+        print(f"Executing: {from_sq} -> {to_sq}")
         self.pick(from_sq)
         self.place(to_sq)
 
-    # -----------------------
-    # OPTIONAL: CAPTURE HANDLING
-    # -----------------------
     def capture_piece(self, square, dump_square="h8"):
-
-        # remove opponent piece first
+        print("Capturing:", square)
         self.pick(square)
         self.place(dump_square)
 
-    # -----------------------
-    # CLEANUP
-    # -----------------------
     def close(self):
         self.ser.close()

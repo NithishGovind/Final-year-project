@@ -1,14 +1,14 @@
 import cv2
 import numpy as np
-import time
 
 
 class VisionSystem:
 
-    def __init__(self, cam_index=1, warp=800):
+    def __init__(self, cam_index=0, warp=800, thresh_delta=15):
 
         self.cap = cv2.VideoCapture(cam_index)
         self.WARP = warp
+        self.THRESH_DELTA = thresh_delta
 
         self.points = []
         self.H = None
@@ -18,7 +18,7 @@ class VisionSystem:
         cv2.setMouseCallback("camera", self.mouse)
 
     # -----------------------
-    # MOUSE INPUT (CALIBRATION)
+    # MOUSE INPUT
     # -----------------------
     def mouse(self, event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN and len(self.points) < 4:
@@ -51,7 +51,7 @@ class VisionSystem:
                 self.sqdict[name] = poly
 
     # -----------------------
-    # CALIBRATION LOOP
+    # CALIBRATION
     # -----------------------
     def calibrate(self):
 
@@ -92,6 +92,22 @@ class VisionSystem:
         cv2.destroyWindow("camera")
 
     # -----------------------
+    # GET BOARD FRAME
+    # -----------------------
+    def get_board_frame(self):
+
+        ret, frame = self.cap.read()
+        if not ret:
+            return None, None
+
+        board = cv2.warpPerspective(frame, self.H, (self.WARP, self.WARP))
+
+        gray = cv2.cvtColor(board, cv2.COLOR_BGR2GRAY)
+        gray = cv2.GaussianBlur(gray, (5, 5), 0)
+
+        return board, gray
+
+    # -----------------------
     # HELPER
     # -----------------------
     def square_mean(self, img, poly):
@@ -100,99 +116,73 @@ class VisionSystem:
         return cv2.mean(img, mask=mask)[0]
 
     # -----------------------
-    # BOARD STATE DETECTION
+    # MOVE DETECTION (CORE)
     # -----------------------
-    def detect_board_state(self, gray):
+    def detect_move(self, before_frame, after_frame):
 
-        board_state = {}
+        sources = []
+        destinations = []
 
         for sq, poly in self.sqdict.items():
 
-            val = self.square_mean(gray, poly)
+            before = self.square_mean(before_frame, poly)
+            after = self.square_mean(after_frame, poly)
 
-            # YOU MUST TUNE THIS
-            if val < 100:
-                board_state[sq] = 1  # occupied
+            delta = after - before
+
+            if abs(delta) < self.THRESH_DELTA:
+                continue
+
+            if delta > 0:
+                sources.append((sq, delta))
             else:
-                board_state[sq] = 0  # empty
+                destinations.append((sq, delta))
 
-        return board_state
-
-    # -----------------------
-    # MOVE EXTRACTION
-    # -----------------------
-    def get_move(self, prev_board, curr_board):
-
-        changed = []
-
-        for sq in prev_board:
-            if prev_board[sq] != curr_board[sq]:
-                changed.append(sq)
-
-        print("Changed squares:", changed)
+        print("\nSources:", sources)
+        print("Destinations:", destinations)
 
         # NORMAL MOVE / CAPTURE
-        if len(changed) == 2:
-
-            sq1, sq2 = changed
-
-            if prev_board[sq1] == 1 and curr_board[sq1] == 0:
-                return sq1, sq2
-
-            elif prev_board[sq2] == 1 and curr_board[sq2] == 0:
-                return sq2, sq1
+        if len(sources) == 1 and len(destinations) == 1:
+            return sources[0][0], destinations[0][0]
 
         # CASTLING
-        if len(changed) == 4:
+        if len(sources) == 2 and len(destinations) == 2:
 
-            sources = []
-            destinations = []
+            pairs = []
 
-            for sq in changed:
-                if prev_board[sq] == 1 and curr_board[sq] == 0:
-                    sources.append(sq)
-                else:
-                    destinations.append(sq)
-
-            best = None
-            max_dist = -1
-
-            for s in sources:
-                for d in destinations:
+            for s, _ in sources:
+                for d, _ in destinations:
                     dist = abs(ord(s[0]) - ord(d[0]))
-                    if dist > max_dist:
-                        max_dist = dist
-                        best = (s, d)
+                    pairs.append((dist, s, d))
 
+            pairs.sort(reverse=True)
+
+            king_move = pairs[0]
             print("Castling detected")
-            return best
 
+            return king_move[1], king_move[2]
+
+        print("Detection failed")
         return None, None
 
     # -----------------------
-    # CAPTURE BOARD SNAPSHOT
+    # SNAPSHOT
     # -----------------------
-    def capture_board(self):
+    def capture_frame(self):
 
-        time.sleep(1.5)  # allow robot to move away
+        _, gray = self.get_board_frame()
 
-        ret, frame = self.cap.read()
-        if not ret:
+        if gray is None:
             return None
 
-        board = cv2.warpPerspective(frame, self.H, (self.WARP, self.WARP))
-
-        gray = cv2.cvtColor(board, cv2.COLOR_BGR2GRAY)
-        gray = cv2.GaussianBlur(gray, (5, 5), 0)
-
-        return self.detect_board_state(gray)
+        return gray.copy()
 
     # -----------------------
     # VERIFY MOVE
     # -----------------------
-    def verify_move(self, prev_board, curr_board, expected_from, expected_to):
+    def verify_move(self, before, after, expected_from, expected_to):
 
-        from_sq, to_sq = self.get_move(prev_board, curr_board)
+        from_sq, to_sq = self.detect_move(before, after)
 
         if from_sq is None:
             print("No valid move detected")

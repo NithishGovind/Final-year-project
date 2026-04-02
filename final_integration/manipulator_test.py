@@ -1,9 +1,57 @@
 from manipulator import Manipulator
+import serial.tools.list_ports
 
 
+# -----------------------
+# AUTO-DETECT ARDUINO PORT
+# -----------------------
+def find_arduino_port():
+    ports = list(serial.tools.list_ports.comports())
+
+    for port in ports:
+        # Detect common Arduino identifiers
+        if (
+            "Arduino" in port.description
+            or "ttyACM" in port.device
+            or "ttyUSB" in port.device
+        ):
+            print(f"Auto-detected Arduino on {port.device}")
+            return port.device
+
+    return None
+
+
+# -----------------------
+# MANUAL PORT SELECTION
+# -----------------------
+def choose_port():
+    ports = list(serial.tools.list_ports.comports())
+
+    if not ports:
+        raise Exception("No serial ports found. Is Arduino connected?")
+
+    print("\nAvailable ports:")
+    for i, port in enumerate(ports):
+        print(f"{i}: {port.device} ({port.description})")
+
+    idx = int(input("Select port number: "))
+    return ports[idx].device
+
+
+# -----------------------
+# MAIN PROGRAM
+# -----------------------
 def main():
 
-    robot = Manipulator(port="COM3")
+    # Try auto-detection first
+    port = find_arduino_port()
+
+    # If not found, ask user
+    if port is None:
+        print("Arduino not auto-detected.")
+        port = choose_port()
+
+    robot = Manipulator(port=port)
 
     print("\nControls:")
     print("1 → Go HOME")
@@ -16,58 +64,66 @@ def main():
 
     while True:
 
-        cmd = input("\nEnter command: ")
+        cmd = input("\nEnter command: ").strip()
 
-        # -----------------------
-        # HOME
-        # -----------------------
-        if cmd == "1":
-            robot.go_home()
+        try:
+            # -----------------------
+            # HOME
+            # -----------------------
+            if cmd == "1":
+                robot.go_home()
 
-        # -----------------------
-        # MOVE TO SQUARE
-        # -----------------------
-        elif cmd == "2":
-            sq = input("Square: ")
-            robot.move_to(sq)
+            # -----------------------
+            # MOVE TO SQUARE
+            # -----------------------
+            elif cmd == "2":
+                sq = input("Square: ").strip()
+                robot.move_to(sq)
 
-        # -----------------------
-        # PICK
-        # -----------------------
-        elif cmd == "3":
-            sq = input("Pick from: ")
-            robot.pick(sq)
+            # -----------------------
+            # PICK
+            # -----------------------
+            elif cmd == "3":
+                sq = input("Pick from: ").strip()
+                robot.pick(sq)
 
-        # -----------------------
-        # PLACE
-        # -----------------------
-        elif cmd == "4":
-            sq = input("Place to: ")
-            robot.place(sq)
+            # -----------------------
+            # PLACE
+            # -----------------------
+            elif cmd == "4":
+                sq = input("Place to: ").strip()
+                robot.place(sq)
 
-        # -----------------------
-        # FULL MOVE
-        # -----------------------
-        elif cmd == "5":
-            from_sq = input("From: ")
-            to_sq = input("To: ")
-            robot.execute_move(from_sq, to_sq)
+            # -----------------------
+            # FULL MOVE
+            # -----------------------
+            elif cmd == "5":
+                from_sq = input("From: ").strip()
+                to_sq = input("To: ").strip()
+                robot.execute_move(from_sq, to_sq)
 
-        # -----------------------
-        # CAPTURE TEST
-        # -----------------------
-        elif cmd == "6":
-            sq = input("Capture square: ")
-            robot.capture_piece(sq)
+            # -----------------------
+            # CAPTURE TEST
+            # -----------------------
+            elif cmd == "6":
+                sq = input("Capture square: ").strip()
+                robot.capture_piece(sq)
 
-        elif cmd == "q":
-            break
+            elif cmd.lower() == "q":
+                print("Exiting...")
+                break
 
-        else:
-            print("Invalid command")
+            else:
+                print("Invalid command")
+
+        except Exception as e:
+            print(f"Error: {e}")
 
     robot.close()
 
 
+# -----------------------
+# ENTRY POINT
+# -----------------------
 if __name__ == "__main__":
     main()

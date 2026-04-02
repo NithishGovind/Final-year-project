@@ -3,7 +3,7 @@ import numpy as np
 from chess_logic import ChessLogic
 
 
-CAM_INDEX = 1
+CAM_INDEX = 0
 WARP = 800
 THRESH = 25
 

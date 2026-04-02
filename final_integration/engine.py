@@ -88,6 +88,27 @@ class ChessEngine:
     # -----------------------
     def close(self):
         self.engine.quit()
+    
+    def print_pretty_board(self):
+
+        board = self.board
+
+        print("\n  a b c d e f g h")
+
+        for rank in range(7, -1, -1):
+            row = []
+            for file in range(8):
+                square = rank * 8 + file
+                piece = board.piece_at(square)
+
+                if piece:
+                    row.append(piece.symbol())
+                else:
+                    row.append(".")
+
+            print(f"{rank+1} " + " ".join(row))
+
+        print()
 
 
 import pygame
